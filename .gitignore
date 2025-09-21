@@ -1,0 +1,38 @@
+﻿# Large data directories
+gadr/
+__pycache__/
+
+# Data files
+*.nc
+*.parquet
+*.csv
+
+# Logs
+*.log
+ingest.log
+
+# Python
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.so
+.Python
+env/
+venv/
+.env
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
