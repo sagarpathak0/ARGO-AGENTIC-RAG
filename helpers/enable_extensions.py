@@ -1,53 +1,81 @@
-﻿#!/usr/bin/env python3
-"""
-Enable missing extensions for Agentic RAG System
-"""
-from sqlalchemy import create_engine, text
+﻿# Enable PostgreSQL extensions for Agentic RAG system
+import sys
+from pathlib import Path
 
-# Your existing connection string
-PG_URL = "postgresql://avnadmin:AVNS_T7GmZnlliHeBAIDQB0r@pg-rabbitanimated-postgres-animate28.i.aivencloud.com:13249/AlgoForge?sslmode=require"
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from config.database import get_database_url, db_config
+from sqlalchemy import create_engine, text
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def enable_extensions():
-    """Enable pgvector and pg_trgm extensions"""
+    """Enable required PostgreSQL extensions"""
     try:
-        engine = create_engine(PG_URL)
-        with engine.connect() as conn:
-            print(" Enabling extensions...")
+        pg_url = get_database_url()
+        logger.info(f"Enabling extensions on database: {db_config.host}:{db_config.port}/{db_config.name}")
+        
+        engine = create_engine(pg_url, pool_pre_ping=True)
+        
+        extensions = [
+            'postgis',    # For geospatial data
+            'pgvector',   # For vector embeddings
+            'pg_trgm',    # For text similarity search
+            '"uuid-ossp"' # For UUID generation (quoted because of hyphen)
+        ]
+        
+        with engine.begin() as conn:
+            logger.info(" Enabling extensions...")
             
-            # Enable pgvector
-            try:
-                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-                print("   pgvector extension enabled")
-            except Exception as e:
-                print(f"   pgvector failed: {e}")
-            
-            # Enable pg_trgm
-            try:
-                conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
-                print("   pg_trgm extension enabled")
-            except Exception as e:
-                print(f"   pg_trgm failed: {e}")
-            
-            conn.commit()
-            
-            # Verify all extensions
+            for ext in extensions:
+                try:
+                    conn.execute(text(f"CREATE EXTENSION IF NOT EXISTS {ext};"))
+                    logger.info(f" {ext.strip('\"')} enabled")
+                except Exception as e:
+                    logger.error(f" Failed to enable {ext}: {e}")
+                    
+            # Verify extensions are installed
             result = conn.execute(text("""
                 SELECT extname, extversion 
                 FROM pg_extension 
-                WHERE extname IN ('postgis', 'vector', 'pg_trgm')
-                ORDER BY extname
+                WHERE extname IN ('postgis', 'pgvector', 'pg_trgm', 'uuid-ossp')
+                ORDER BY extname;
             """))
-            extensions = result.fetchall()
-            print("\n All Extensions Status:")
-            for ext in extensions:
-                print(f"   {ext[0]} v{ext[1]}")
             
+            installed = result.fetchall()
+            logger.info("\n Verification - Installed Extensions:")
+            logger.info("-" * 40)
+            
+            for ext_name, ext_version in installed:
+                logger.info(f" {ext_name:12} v{ext_version}")
+            
+            logger.info("\n Extension setup complete!")
             return True
+            
     except Exception as e:
-        print(f" Failed to enable extensions: {e}")
+        logger.error(f" Failed to enable extensions: {e}")
         return False
 
 if __name__ == "__main__":
-    print(" Enabling Extensions for Agentic RAG")
-    print("=" * 40)
-    enable_extensions()
+    logger.info(" PostgreSQL Extension Setup")
+    logger.info("=" * 40)
+    
+    # Test configuration loading
+    if not db_config.database_url:
+        logger.error(" Database configuration not loaded. Check your .env file.")
+        sys.exit(1)
+    
+    logger.info(f" Target database: {db_config.host}:{db_config.port}/{db_config.name}")
+    
+    success = enable_extensions()
+    
+    if success:
+        logger.info(" All extensions enabled successfully!")
+    else:
+        logger.error(" Extension setup failed.")
+        sys.exit(1)

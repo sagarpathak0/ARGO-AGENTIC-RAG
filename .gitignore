@@ -1,27 +1,20 @@
-﻿# Large data directories
+﻿# .env
+# Add all sensitive configuration files to gitignore
+*.env
+.env.*
+!.env.example
 gadr/
+# Database backups
+*.sql.backup
+*.dump
+
+# Python cache
 __pycache__/
-
-# Data files
-*.nc
-*.parquet
-*.csv
-
-# Logs
-*.log
-ingest.log
-
-# Python
 *.pyc
 *.pyo
 *.pyd
-__pycache__/
-*.so
 .Python
-env/
-venv/
-.env
-.venv/
+*.so
 
 # IDE
 .vscode/
@@ -33,6 +26,10 @@ venv/
 .DS_Store
 Thumbs.db
 
+# Logs
+*.log
+logs/
+
 # Temporary files
-*.tmp
-*.temp
+tmp/
+temp/
