@@ -226,7 +226,7 @@ const Dashboard: React.FC = () => {
                       ? "Enter search terms for semantic similarity..."
                       : "Ask questions about oceanographic data..."
                   }
-                  className="flex-1 text-black px-10 py-3 border w-100 border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="flex-1 text-black px-10 py-3 border w-200 border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                 />
               </div>
