@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Search, MapPin, Calendar, Thermometer, LogOut, User } from 'lucide-react';
+import { Search, MapPin, Calendar, Thermometer, LogOut, User, Waves } from 'lucide-react';
 import axios from 'axios';
+import Link from 'next/link';
 
 interface SearchResult {
   profile_id: number;
@@ -151,6 +152,13 @@ const Dashboard: React.FC = () => {
               <span className="ml-4 text-sm text-gray-500">Oceanographic Intelligence</span>
             </div>
             <div className="flex items-center space-x-4">
+              <Link 
+                href="/dashboard-new"
+                className="flex items-center space-x-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-cyan-400 hover:to-blue-500 transition-all duration-300 shadow-md"
+              >
+                <Waves className="h-4 w-4" />
+                <span className="text-sm font-medium">Ocean Theme</span>
+              </Link>
               <div className="flex items-center space-x-2 text-sm text-gray-600">
                 <User className="h-4 w-4" />
                 <span>{user?.email}</span>
