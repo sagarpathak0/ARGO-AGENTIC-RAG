@@ -406,6 +406,32 @@ def intelligent_search_aggregated(query: str, limit: int = 10) -> tuple:
                 "unit": "dbar (pressure) / ~10m depth"
             }
         
+        # Format query understanding data
+        query_understanding = None
+        confidence = 0.0
+        filters_applied = []
+        
+        if intent:
+            query_understanding = {
+                "query_types": [qt.value for qt in intent.query_types],
+                "geographic_region": intent.geographic_bounds.name if intent.geographic_bounds else None,
+                "time_period": f"{intent.temporal_filter.year}{f'/{intent.temporal_filter.month}' if intent.temporal_filter.month else ''}" if intent.temporal_filter else None,
+                "measurements": [mt.value for mt in intent.measurement_types] if intent.measurement_types else None,
+                "statistics": intent.statistical_operations if intent.statistical_operations else None
+            }
+            confidence = intent.confidence
+            
+            # List applied filters
+            if intent.geographic_bounds:
+                filters_applied.append(f"Geographic: {intent.geographic_bounds.name}")
+            if intent.temporal_filter:
+                if intent.temporal_filter.month and intent.temporal_filter.year:
+                    filters_applied.append(f"Time: {intent.temporal_filter.month}/{intent.temporal_filter.year}")
+                elif intent.temporal_filter.year:
+                    filters_applied.append(f"Year: {intent.temporal_filter.year}")
+            if intent.measurement_types:
+                filters_applied.append(f"Measurements: {', '.join([mt.value for mt in intent.measurement_types])}")
+        
         # Format aggregated response
         aggregated_data = {
             "summary": {
@@ -424,7 +450,10 @@ def intelligent_search_aggregated(query: str, limit: int = 10) -> tuple:
                     "names": agg_result['institutions'] if agg_result['institutions'] else []
                 }
             },
-            "measurements": measurements
+            "measurements": measurements,
+            "query_understanding": query_understanding,
+            "confidence": confidence,
+            "filters_applied": filters_applied
         }
         
         conn.close()
@@ -442,7 +471,10 @@ def intelligent_search_aggregated(query: str, limit: int = 10) -> tuple:
         
         return {
             "summary": {"total_profiles": result['total_profiles'] if result['total_profiles'] else 0},
-            "measurements": {}
+            "measurements": {},
+            "query_understanding": None,
+            "confidence": 0.0,
+            "filters_applied": []
         }, None
         
     except Exception as e:

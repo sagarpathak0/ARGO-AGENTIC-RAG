@@ -94,16 +94,16 @@ class OceanographicNLP:
         """Load measurement type keywords"""
         return {
             MeasurementType.TEMPERATURE: [
-                "temperature", "temp", "thermal", "heat", "warm", "cold", "celsius", "c"
+                "temperature", "temp", "thermal", "heat", "warm", "cold", "celsius", "°c", "degrees"
             ],
             MeasurementType.SALINITY: [
                 "salinity", "salt", "saline", "psu", "practical salinity", "salt content"
             ],
             MeasurementType.PRESSURE: [
-                "pressure", "depth pressure", "hydrostatic", "dbar", "decibar"
+                "pressure", "depth pressure", "hydrostatic", "dbar", "decibar", "bar"
             ],
             MeasurementType.DEPTH: [
-                "depth", "deep", "shallow", "meters", "m", "depth level"
+                "depth", "deep", "shallow", "meters", "metres", "depth level", "bathymetry"
             ],
             MeasurementType.DENSITY: [
                 "density", "water density", "sigma", "potential density"
@@ -264,7 +264,10 @@ class OceanographicNLP:
         
         for measurement_type, keywords in self.measurement_keywords.items():
             for keyword in keywords:
-                if keyword in query:
+                # Use word boundaries to prevent partial matches (e.g., 'c' in 'ocean')
+                import re
+                pattern = r'\b' + re.escape(keyword) + r'\b'
+                if re.search(pattern, query, re.IGNORECASE):
                     if measurement_type not in found_types:
                         found_types.append(measurement_type)
                     break

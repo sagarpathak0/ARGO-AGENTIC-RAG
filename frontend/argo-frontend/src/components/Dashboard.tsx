@@ -398,31 +398,37 @@ const Dashboard: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               <div className="bg-blue-50 p-4 rounded-lg">
                 <h3 className="font-semibold text-blue-800">📍 Geographic Coverage</h3>
-                <p className="text-sm text-gray-600">
-                  Lat: {aggregatedResponse.summary.geographic_bounds.latitude_range[0].toFixed(2)}° to {aggregatedResponse.summary.geographic_bounds.latitude_range[1].toFixed(2)}°
-                </p>
-                <p className="text-sm text-gray-600">
-                  Lon: {aggregatedResponse.summary.geographic_bounds.longitude_range[0].toFixed(2)}° to {aggregatedResponse.summary.geographic_bounds.longitude_range[1].toFixed(2)}°
-                </p>
+                {aggregatedResponse.summary.geographic_bounds?.latitude_range && aggregatedResponse.summary.geographic_bounds?.longitude_range ? (
+                  <>
+                    <p className="text-sm text-gray-600">
+                      Lat: {aggregatedResponse.summary.geographic_bounds.latitude_range[0].toFixed(2)}° to {aggregatedResponse.summary.geographic_bounds.latitude_range[1].toFixed(2)}°
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Lon: {aggregatedResponse.summary.geographic_bounds.longitude_range[0].toFixed(2)}° to {aggregatedResponse.summary.geographic_bounds.longitude_range[1].toFixed(2)}°
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-600">Geographic data not available</p>
+                )}
               </div>
               
               <div className="bg-green-50 p-4 rounded-lg">
                 <h3 className="font-semibold text-green-800">📅 Time Period</h3>
                 <p className="text-sm text-gray-600">
-                  {aggregatedResponse.summary.date_range.start ? new Date(aggregatedResponse.summary.date_range.start).toLocaleDateString() : 'N/A'} to {aggregatedResponse.summary.date_range.end ? new Date(aggregatedResponse.summary.date_range.end).toLocaleDateString() : 'N/A'}
+                  {aggregatedResponse.summary.date_range?.start ? new Date(aggregatedResponse.summary.date_range.start).toLocaleDateString() : 'N/A'} to {aggregatedResponse.summary.date_range?.end ? new Date(aggregatedResponse.summary.date_range.end).toLocaleDateString() : 'N/A'}
                 </p>
               </div>
               
               <div className="bg-purple-50 p-4 rounded-lg">
                 <h3 className="font-semibold text-purple-800">🏛️ Data Sources</h3>
                 <p className="text-sm text-gray-600">
-                  {aggregatedResponse.summary.institutions.count} institutions
+                  {aggregatedResponse.summary.institutions?.count || 0} institutions
                 </p>
               </div>
             </div>
             
             {/* Measurement Statistics */}
-            {Object.keys(aggregatedResponse.measurements).length > 0 && (
+            {aggregatedResponse.measurements && Object.keys(aggregatedResponse.measurements).length > 0 && (
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-gray-900">🌡️ Measurement Statistics</h3>
                 
