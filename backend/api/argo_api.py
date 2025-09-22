@@ -125,6 +125,13 @@ class TokenResponse(BaseModel):
     token_type: str
     user: UserProfile
 
+class AggregatedSearchResponse(BaseModel):
+    summary: Dict[str, Any]
+    measurements: Dict[str, Any]
+    query_understanding: Optional[Dict[str, Any]] = None
+    confidence: float = 0.0
+    filters_applied: List[str] = []
+
 # ============================================================================
 # DATABASE AND AUTH UTILITIES
 # ============================================================================
@@ -787,14 +794,14 @@ async def semantic_search_endpoint(query: SearchQuery, current_user: UserProfile
         raise HTTPException(status_code=500, detail=f"Semantic search failed: {str(e)}")
 
 # Add this new endpoint for intelligent search
-@app.post("/search/intelligent", response_model=IntelligentSearchResponse)
+@app.post("/search/intelligent", response_model=AggregatedSearchResponse)
 async def intelligent_search_endpoint(query: SearchQuery, current_user: UserProfile = Depends(get_current_user)):
-    """Perform intelligent search with NLP understanding (requires authentication)"""
-    logger.info(f" Intelligent search query from {current_user.email}: {query.query}")
+    """Perform intelligent search with aggregated oceanographic statistics"""
+    logger.info(f"🧠 Aggregated intelligent search from {current_user.email}: {query.query}")
     
     try:
-        # Perform intelligent search
-        results, intent = intelligent_search(query=query.query, limit=query.limit)
+        # Perform aggregated intelligent search
+        aggregated_data, intent = intelligent_search_aggregated(query=query.query, limit=query.limit)
         
         # Prepare response
         query_understanding = None
@@ -818,33 +825,17 @@ async def intelligent_search_endpoint(query: SearchQuery, current_user: UserProf
             if intent.measurement_types:
                 filters_applied.append(f"Measurements: {', '.join([mt.value for mt in intent.measurement_types])}")
         
-        # Update user query count
-        try:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                UPDATE users 
-                SET daily_query_count = daily_query_count + 1,
-                    total_queries = total_queries + 1
-                WHERE id = %s
-            """, (current_user.id,))
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            logger.warning(f"Failed to update query count: {e}")
-        
-        logger.info(f" Intelligent search found {len(results)} results for {current_user.email} (confidence: {confidence:.2f})")
-        
-        return IntelligentSearchResponse(
-            results=results,
+        return AggregatedSearchResponse(
+            summary=aggregated_data["summary"],
+            measurements=aggregated_data["measurements"],
             query_understanding=query_understanding,
             confidence=confidence,
             filters_applied=filters_applied
         )
         
     except Exception as e:
-        logger.error(f" Intelligent search failed for {current_user.email}: {e}")
-        raise HTTPException(status_code=500, detail=f"Intelligent search failed: {str(e)}")
+        logger.error(f"🧠 Aggregated intelligent search failed for {current_user.email}: {e}")
+        raise HTTPException(status_code=500, detail=f"Aggregated intelligent search failed: {str(e)}")
 
 
 def create_query_embedding(query: str) -> List[float]:
@@ -857,6 +848,211 @@ def create_query_embedding(query: str) -> List[float]:
     except Exception as e:
         logger.error(f"Embedding creation failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to create query embedding")
+
+def intelligent_search_aggregated(query: str, limit: int = 10) -> tuple:
+    """Perform intelligent search with aggregated oceanographic statistics"""
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    
+    try:
+        # Import NLP system
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'tools', 'analysis'))
+        from nlp_query_processor import OceanographicNLP
+        
+        # Initialize NLP system
+        nlp_system = OceanographicNLP()
+        
+        # Parse the query
+        intent = nlp_system.parse_query(query)
+        
+        # Build WHERE conditions
+        where_conditions = []
+        params = []
+        
+        # Add intelligent filters based on NLP parsing
+        if intent and intent.geographic_bounds:
+            lat_min = intent.geographic_bounds.min_lat
+            lat_max = intent.geographic_bounds.max_lat
+            lon_min = intent.geographic_bounds.min_lon
+            lon_max = intent.geographic_bounds.max_lon
+            
+            where_conditions.append("latitude BETWEEN %s AND %s")
+            params.extend([lat_min, lat_max])
+            where_conditions.append("longitude BETWEEN %s AND %s")
+            params.extend([lon_min, lon_max])
+        
+        if intent and intent.temporal_filter:
+            if intent.temporal_filter.start_date:
+                where_conditions.append("date >= %s")
+                params.append(intent.temporal_filter.start_date)
+            if intent.temporal_filter.end_date:
+                where_conditions.append("date <= %s")
+                params.append(intent.temporal_filter.end_date)
+        
+        # Build WHERE clause
+        where_clause = ""
+        if where_conditions:
+            where_clause = " AND " + " AND ".join(where_conditions)
+        
+        # 1. Get basic profile aggregation
+        base_query = f"""
+        SELECT 
+            COUNT(*) as total_profiles,
+            MIN(date) as earliest_date,
+            MAX(date) as latest_date,
+            AVG(latitude) as avg_latitude,
+            AVG(longitude) as avg_longitude,
+            MIN(latitude) as min_latitude,
+            MAX(latitude) as max_latitude,
+            MIN(longitude) as min_longitude,
+            MAX(longitude) as max_longitude,
+            COUNT(DISTINCT institution) as institutions_count,
+            array_agg(DISTINCT institution) as institutions
+        FROM argo_profiles 
+        WHERE 1=1 {where_clause}
+        """
+        
+        logger.info(f"Executing aggregation query: {base_query}")
+        logger.info(f"With parameters: {params}")
+        cursor.execute(base_query, params)
+        agg_result = cursor.fetchone()
+        
+        # 2. Get measurement statistics using simplified approach
+        measurements = {}
+        
+        # Check what measurements were requested
+        requested_temp = intent and intent.measurement_types and any('temp' in str(mt).lower() for mt in intent.measurement_types)
+        requested_sal = intent and intent.measurement_types and any('sal' in str(mt).lower() for mt in intent.measurement_types)
+        requested_depth = intent and intent.measurement_types and any('depth' in str(mt).lower() or 'pressure' in str(mt).lower() for mt in intent.measurement_types)
+        
+        # Get sample data for measurements calculation
+        sample_query = f"""
+        SELECT ocean_data 
+        FROM argo_profiles 
+        WHERE ocean_data IS NOT NULL 
+        AND ocean_data != '{{}}'
+        {where_clause}
+        LIMIT 1000
+        """
+        
+        logger.info(f"Getting sample data for measurements: {sample_query}")
+        cursor.execute(sample_query, params)
+        sample_results = cursor.fetchall()
+        
+        # Process ocean data in Python (more reliable than complex SQL)
+        temp_values = []
+        sal_values = []
+        pres_values = []
+        
+        for row in sample_results:
+            ocean_data = row['ocean_data']
+            if ocean_data:
+                # Extract temperature data
+                if requested_temp and 'temp' in ocean_data:
+                    temp_data = ocean_data['temp']
+                    if isinstance(temp_data, list):
+                        temp_values.extend([float(x) for x in temp_data if x is not None and str(x) != 'nan'])
+                    elif temp_data is not None and str(temp_data) != 'nan':
+                        temp_values.append(float(temp_data))
+                
+                # Extract salinity data
+                if requested_sal and 'psal' in ocean_data:
+                    sal_data = ocean_data['psal']
+                    if isinstance(sal_data, list):
+                        sal_values.extend([float(x) for x in sal_data if x is not None and str(x) != 'nan'])
+                    elif sal_data is not None and str(sal_data) != 'nan':
+                        sal_values.append(float(sal_data))
+                
+                # Extract pressure data
+                if requested_depth and 'pres' in ocean_data:
+                    pres_data = ocean_data['pres']
+                    if isinstance(pres_data, list):
+                        pres_values.extend([float(x) for x in pres_data if x is not None and str(x) != 'nan'])
+                    elif pres_data is not None and str(pres_data) != 'nan':
+                        pres_values.append(float(pres_data))
+        
+        # Calculate temperature statistics
+        if temp_values:
+            import statistics
+            measurements["temperature"] = {
+                "average": statistics.mean(temp_values),
+                "min": min(temp_values),
+                "max": max(temp_values),
+                "std_deviation": statistics.stdev(temp_values) if len(temp_values) > 1 else 0,
+                "total_measurements": len(temp_values),
+                "unit": "°C"
+            }
+        
+        # Calculate salinity statistics
+        if sal_values:
+            import statistics
+            measurements["salinity"] = {
+                "average": statistics.mean(sal_values),
+                "min": min(sal_values),
+                "max": max(sal_values),
+                "std_deviation": statistics.stdev(sal_values) if len(sal_values) > 1 else 0,
+                "total_measurements": len(sal_values),
+                "unit": "PSU"
+            }
+        
+        # Calculate depth/pressure statistics
+        if pres_values:
+            import statistics
+            measurements["depth"] = {
+                "average": statistics.mean(pres_values),
+                "min": min(pres_values),
+                "max": max(pres_values),
+                "std_deviation": statistics.stdev(pres_values) if len(pres_values) > 1 else 0,
+                "total_measurements": len(pres_values),
+                "unit": "dbar (pressure) / ~10m depth"
+            }
+        
+        # Format aggregated response
+        aggregated_data = {
+            "summary": {
+                "total_profiles": agg_result['total_profiles'] if agg_result['total_profiles'] else 0,
+                "date_range": {
+                    "start": agg_result['earliest_date'].isoformat() if agg_result['earliest_date'] else None,
+                    "end": agg_result['latest_date'].isoformat() if agg_result['latest_date'] else None
+                },
+                "geographic_bounds": {
+                    "latitude_range": [float(agg_result['min_latitude']), float(agg_result['max_latitude'])] if agg_result['min_latitude'] else [0, 0],
+                    "longitude_range": [float(agg_result['min_longitude']), float(agg_result['max_longitude'])] if agg_result['min_longitude'] else [0, 0],
+                    "center": [float(agg_result['avg_latitude']), float(agg_result['avg_longitude'])] if agg_result['avg_latitude'] else [0, 0]
+                },
+                "institutions": {
+                    "count": agg_result['institutions_count'] if agg_result['institutions_count'] else 0,
+                    "names": agg_result['institutions'] if agg_result['institutions'] else []
+                }
+            },
+            "measurements": measurements
+        }
+        
+        conn.close()
+        logger.info(f"Aggregated intelligent search found {agg_result['total_profiles']} profiles with {len(measurements)} measurement types")
+        
+        return aggregated_data, intent
+        
+    except ImportError as e:
+        logger.error(f"NLP system not available: {e}")
+        # Simple fallback
+        basic_query = "SELECT COUNT(*) as total_profiles FROM argo_profiles"
+        cursor.execute(basic_query)
+        result = cursor.fetchone()
+        conn.close()
+        
+        return {
+            "summary": {"total_profiles": result['total_profiles'] if result['total_profiles'] else 0},
+            "measurements": {}
+        }, None
+        
+    except Exception as e:
+        conn.close()
+        logger.error(f"Aggregated intelligent search failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Aggregated search failed: {str(e)}")
 # ============================================================================
 # RUN SERVER
 # ============================================================================
