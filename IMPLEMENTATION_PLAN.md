@@ -36,7 +36,7 @@ This is a comprehensive implementation plan for building an advanced Agentic RAG
 #### **Step 2: Core Database Schema Optimization**  **COMPLETE**  
 - **Status**:  Comprehensive normalized schema designed
 - **Details**: 8 table groups with user management, authentication, query tracking, vector embeddings
-- **Files**: ackend/database/schemas/comprehensive_schema.sql, full documentation created
+- **Files**: backend/database/schemas/comprehensive_schema.sql, full documentation created
 - **Features**: 3NF normalization, performance indexes, generated columns, audit logging
 
 #### **Step 3: Update Ingestion Script for New Schema**  **COMPLETE**
